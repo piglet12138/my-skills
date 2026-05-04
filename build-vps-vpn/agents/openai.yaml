@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build VPS VPN"
+  short_description: "Deploy WireGuard and sing-box on a VPS"
+  default_prompt: "Use $build-vps-vpn to build a WireGuard VPN on a fresh Azure VPS."
