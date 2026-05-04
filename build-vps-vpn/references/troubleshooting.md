@@ -1,60 +1,57 @@
 # Troubleshooting
 
-## Client Cannot Handshake
+## Service Does Not Start
+
+Validate the config first:
+
+```bash
+sudo sing-box check -c /etc/sing-box/config.json
+sudo journalctl -u sing-box -n 100 --no-pager
+```
+
+Common causes:
+
+- Invalid JSON after manual edits.
+- Certificate path or key path does not exist.
+- The configured port is already used by nginx or another service.
+- The service user cannot read the certificate/key files.
+
+## Client Cannot Connect
 
 Check cloud firewall first:
 
 ```bash
-sudo tcpdump -ni any udp port 51820 or udp port 443
-sudo wg show
+ss -tulpn | rg '18443|36712|sing-box'
+sudo tcpdump -ni any 'tcp port 18443 or udp port 36712'
 ```
 
-If tcpdump sees no packet, the problem is outside WireGuard: cloud firewall, local client network, wrong endpoint, or wrong port.
+If tcpdump sees no packet, the problem is outside sing-box: Azure NSG, local client network, wrong server address, or wrong port.
 
-If packets arrive but `wg show` has no latest handshake:
+If packets arrive but the client fails:
 
-- Confirm the client uses the server public key, not private key.
-- Confirm the server has the client's public key.
-- Confirm the client endpoint points to the public port, not necessarily the server's local listen port.
+- Confirm the VLESS UUID, Reality public key, short ID, flow, and SNI match the generated values.
+- Confirm the Hysteria2 password and TLS server name match the generated config and certificate.
+- Confirm the client is using TCP for VLESS Reality and UDP for Hysteria2.
 - Confirm server time is sane with `timedatectl`.
-
-## Handshake Works but No Internet
-
-Check forwarding and NAT:
-
-```bash
-sysctl net.ipv4.ip_forward
-iptables-save | rg 'FORWARD|POSTROUTING|10\.8\.0\.0/24|wg0'
-ip route show default
-```
-
-Expected:
-
-- `net.ipv4.ip_forward = 1`
-- `FORWARD` accepts `wg0` in and out
-- `POSTROUTING` masquerades `10.8.0.0/24` through the default egress interface
-
-On the client, check that `AllowedIPs` includes the target destination. Full tunnel uses `0.0.0.0/0`; split tunnel must include every target CIDR.
 
 ## Client Egress IP Did Not Change
 
-Run from the client:
+Run from the client through the proxy:
 
 ```bash
-wg show
 curl -4 https://api.ipify.org
-ip route
 ```
 
 Most common causes:
 
-- Client `AllowedIPs` is split-tunnel and does not include the IP being tested.
-- Another local VPN/proxy is overriding routes.
-- The client imported an old config pointing to the old VPS.
+- The client app is connected but the test command is not routed through it.
+- The client is in rule mode and the test URL is direct-routed.
+- Another local VPN/proxy is taking precedence.
+- The client imported an old profile pointing to the old VPS.
 
 ## OpenAI API Works but ChatGPT Login Fails
 
-This is usually IP reputation, not VPN routing.
+This is usually IP reputation, not proxy service health.
 
 Signs:
 
@@ -66,14 +63,21 @@ Action:
 
 - Use API key mode if the user's workflow only needs the OpenAI API.
 - If OAuth/ChatGPT login is required, test a different egress IP.
-- Do not spend time changing WireGuard keys or NAT rules when the client egress IP is already the VPS IP and only auth/chatgpt is challenged.
+- Do not spend time rotating UUIDs, Reality keys, or Hysteria2 passwords when the client egress IP is already the VPS IP and only auth/chatgpt is challenged.
 
-## Docker Breakage After VPN Install
+## Port Conflicts
 
-The VPN NAT must stay scoped:
+Check listeners:
 
 ```bash
-iptables -t nat -S POSTROUTING | rg '10\.8\.0\.0/24|172\.'
+ss -tulpn
 ```
 
-Avoid replacing Docker's own NAT rules or adding broad `! -o wg0 -j MASQUERADE` rules. The expected VPN rule only matches `-s 10.8.0.0/24`.
+Typical layout:
+
+- nginx owns TCP `80` and `443`.
+- sing-box owns TCP `18443`.
+- sing-box owns UDP `36712`.
+- sing-box Clash API stays on `127.0.0.1:9090`.
+
+Move sing-box ports rather than sharing a port already owned by nginx unless the user intentionally builds a more advanced fronting setup.
