@@ -12,7 +12,7 @@ triggers:
 ## 站点基本信息
 
 - **域名**: sg.yaoyuheng2001.me
-- **服务器**: 167.71.197.117 (DigitalOcean, SSH pubkey auth)
+- **服务器**: DigitalOcean Droplet (SSH pubkey auth, IP 见私有配置)
 - **静态目录**: `/root/blog/dist/`
 - **Nginx**: 直接 serve 静态文件，无构建步骤
 - **CSS 文件**: `/_astro/index@_@astro.ByWFJekH.css`（白皮书/长文风格）或 inline astro-cid CSS（短文风格）
@@ -121,11 +121,11 @@ triggers:
 
 ```bash
 # 1. 创建目录并上传
-ssh root@167.71.197.117 "mkdir -p /root/blog/dist/posts/POST_SLUG"
-scp /tmp/POST_FILE.html root@167.71.197.117:/root/blog/dist/posts/POST_SLUG/index.html
+ssh root@YOUR_SERVER_IP "mkdir -p /root/blog/dist/posts/POST_SLUG"
+scp /tmp/POST_FILE.html root@YOUR_SERVER_IP:/root/blog/dist/posts/POST_SLUG/index.html
 
 # 2. 验证
-ssh root@167.71.197.117 "curl -s -o /dev/null -w '%{http_code}' https://sg.yaoyuheng2001.me/posts/POST_SLUG/"
+ssh root@YOUR_SERVER_IP "curl -s -o /dev/null -w '%{http_code}' https://sg.yaoyuheng2001.me/posts/POST_SLUG/"
 ```
 
 ### Phase 3: 更新站点级 SEO 资源
