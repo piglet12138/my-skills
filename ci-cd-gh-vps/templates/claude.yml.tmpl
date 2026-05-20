@@ -1,0 +1,48 @@
+name: Claude Code Agent
+
+# Triggered by @claude mentions in issues/PRs.  The agent reads the
+# referenced context (issue body, PR diff, prior CI logs), edits code,
+# pushes commits to the PR branch, and re-runs the CI smoke workflow.
+#
+# Safety: the agent can write to repo contents and open PRs, but cannot
+# merge — merges remain a human decision.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment'              && contains(github.event.comment.body, '@claude'))                                                  ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))                                                 ||
+      (github.event_name == 'pull_request_review'         && contains(github.event.review.body,  '@claude'))                                                 ||
+      (github.event_name == 'issues'                      && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents:       write
+      pull-requests:  write
+      issues:         write
+      id-token:       write
+      actions:        read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # Uses Claude Pro/Max subscription quota via OAuth — no API key billing.
+          # Generate via `claude /install-github-app` on local CC, which writes
+          # the CLAUDE_CODE_OAUTH_TOKEN secret to this repo automatically.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Keep tool surface narrow; expand once basic loop works.
+          claude_args: --allowed-tools "Bash,Read,Edit,Glob,Grep,Write"

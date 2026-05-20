@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# CI smoke runner — invoked on the VPS by .github/workflows/ci-smoke.yml
+# after the artifact has been scp'd.  Designed to be called as the
+# unprivileged runtime user (already done by the ssh-action; this script
+# does not su again).
+#
+# Inputs (env):
+#   ANTHROPIC_API_KEY  — required
+#   ANTHROPIC_BASE_URL — defaults to http://127.0.0.1:3000
+#                        (use 127.0.0.1, NOT localhost — IPv6 ::1 stalls
+#                         when the listener only binds IPv4)
+#   INSTALL_DIR        — defaults to __INSTALL_DIR__
+#   SMOKE_NONCLAUDE    — set to 1 to test alt-provider models too
+#
+# Exit codes:
+#   0 → all checks passed, or tunnel down (graceful skip)
+#   1 → at least one model returned wrong / no response
+set -u
+
+cd "${INSTALL_DIR:-__INSTALL_DIR__}"
+
+: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set}"
+: "${ANTHROPIC_BASE_URL:=http://127.0.0.1:3000}"
+export ANTHROPIC_API_KEY ANTHROPIC_BASE_URL
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+# Reverse-tunnel reachability check.  If the upstream is exposed via
+# `ssh -R` from a developer machine that's currently off, exit cleanly
+# rather than failing the build for an off-hours push.
+echo "--- Reachability check: $ANTHROPIC_BASE_URL ---"
+http_code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$ANTHROPIC_BASE_URL/" 2>/dev/null || echo "000")
+if [ "$http_code" = "000" ]; then
+  echo "::warning::Cannot reach $ANTHROPIC_BASE_URL — reverse tunnel from dev host appears down."
+  echo "::warning::Skipping smoke (expected when dev machine is off)."
+  exit 0
+fi
+echo "Upstream reachable (HTTP $http_code)."
+
+PROMPT='reply with just the two characters: OK'
+PASS=0
+FAIL=0
+FAILED_NAMES=()
+
+check() {
+  local name="$1" model="$2"
+  echo "--- $name [$model] ---"
+  local out
+  if ! out=$(timeout 60 node __ARTIFACT__ --print --model "$model" "$PROMPT" </dev/null 2>&1); then
+    printf '%s\n' "$out"
+    echo "FAIL: $name (timeout or non-zero exit)"
+    FAIL=$((FAIL+1))
+    FAILED_NAMES+=("$name")
+    return
+  fi
+  printf '%s\n' "$out"
+  if printf '%s' "$out" | grep -qi 'OK'; then
+    echo "PASS: $name"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL: $name (no OK in output)"
+    FAIL=$((FAIL+1))
+    FAILED_NAMES+=("$name")
+  fi
+}
+
+# Replace these with the model IDs you actually care about.
+check "baseline-haiku" "claude-haiku-4-5-20251001"
+
+if [ "${SMOKE_NONCLAUDE:-0}" = "1" ]; then
+  check "gpt"  "gpt-5.4"
+  check "glm"  "glm-4.7"
+fi
+
+echo ""
+echo "Summary: PASS=$PASS FAIL=$FAIL"
+if [ "$FAIL" -gt 0 ]; then
+  printf '::error::Smoke had %d failure(s): %s\n' "$FAIL" "${FAILED_NAMES[*]}"
+  exit 1
+fi
+echo "All smoke tests passed."
