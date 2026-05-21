@@ -1,0 +1,296 @@
+---
+import Analytics from "../../../components/Analytics.astro";
+const title = '__TITLE__';
+const subtitle = '__SUBTITLE__';
+const description = '__DESCRIPTION__';
+const url = 'https://sg.yaoyuheng2001.me/posts/__SLUG__/';
+const datePublished = '__DATE_PUBLISHED__';
+const dateModified = '__DATE_MODIFIED__';
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": title,
+  "alternativeHeadline": subtitle,
+  "description": description,
+  "url": url,
+  "datePublished": datePublished,
+  "dateModified": dateModified,
+  "inLanguage": "zh-CN",
+  "author": {"@type":"Person","name":"Yao Yuheng","alternateName":"姚钰珩","url":"https://sg.yaoyuheng2001.me/"},
+  "publisher": {"@type":"Person","name":"Yao Yuheng","url":"https://sg.yaoyuheng2001.me/"},
+  "mainEntityOfPage": url,
+  "image": "https://sg.yaoyuheng2001.me/images/__SLUG__/__HERO_IMG__",
+  "keywords": "__KEYWORDS_CSV__",
+  "wordCount": __WORD_COUNT__,
+  "articleSection": "__SECTION__"
+};
+
+const faqLd = __FAQ_JSONLD_OBJ__;
+---
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content={description} />
+  <meta name="keywords" content="__KEYWORDS_CSV__" />
+  <meta name="author" content="Yao Yuheng" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+  <link rel="canonical" href={url} />
+  __HREFLANG_LINKS__
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:url" content={url} />
+  <meta property="og:type" content="article" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:image" content="https://sg.yaoyuheng2001.me/images/__SLUG__/__HERO_IMG__" />
+  <meta property="article:published_time" content={datePublished} />
+  <meta property="article:modified_time" content={dateModified} />
+  <meta property="article:author" content="Yao Yuheng" />
+  <meta property="article:section" content="__SECTION__" />
+  __TAGS_META__
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content="https://sg.yaoyuheng2001.me/images/__SLUG__/__HERO_IMG__" />
+  <title>{title} — Yao Yuheng</title>
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --cream: #faf6ee;
+      --paper: #f3ede2;
+      --ink: #2a2118;
+      --ink-light: #5c4f42;
+      --ink-faint: #9a8d7f;
+      --rust: #b5543a;
+      --rust-soft: rgba(181, 84, 58, 0.08);
+      --line: #ddd1c1;
+      --warm-white: #fffcf6;
+      --display: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
+      --body: 'Noto Serif SC', 'DM Sans', Georgia, serif;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--body);
+      color: var(--ink);
+      background-color: var(--cream);
+      background-image: url('/images/__SLUG__/__PAPER_BG__');
+      background-size: cover;
+      background-position: center center;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+      line-height: 1.9;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 9999;
+    }
+
+    .back {
+      position: fixed; top: 22px; left: 22px; z-index: 50;
+      font-family: var(--body); font-size: 13px;
+      color: var(--ink-faint); text-decoration: none;
+      background: rgba(255, 252, 246, 0.85);
+      border: 1px solid var(--line);
+      padding: 6px 14px; border-radius: 999px;
+      backdrop-filter: blur(8px);
+      transition: all 0.25s;
+    }
+    .back:hover { color: var(--rust); border-color: var(--rust); }
+
+    article {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 96px 28px 96px;
+      position: relative;
+    }
+
+    .eyebrow {
+      font-family: var(--body);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 11px;
+      color: var(--rust);
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-family: var(--display);
+      font-weight: 600;
+      font-size: clamp(34px, 5.6vw, 52px);
+      line-height: 1.1;
+      letter-spacing: -0.015em;
+      margin-bottom: 14px;
+      color: var(--ink);
+    }
+
+    .subtitle {
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(18px, 2.4vw, 22px);
+      color: var(--ink-light);
+      line-height: 1.45;
+      margin-bottom: 28px;
+    }
+
+    .meta {
+      color: var(--ink-faint);
+      font-size: 13px;
+      margin-bottom: 36px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .meta .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--rust-soft);
+      color: var(--rust);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+    }
+
+    .lead {
+      font-family: var(--display);
+      font-weight: 400;
+      font-size: 19px;
+      color: var(--ink-light);
+      line-height: 1.65;
+      margin-bottom: 32px;
+      letter-spacing: -0.005em;
+    }
+
+    .cta { display: flex; gap: 12px; margin: 24px 0 40px; flex-wrap: wrap; }
+    .cta a {
+      display: inline-flex; align-items: center;
+      padding: 10px 18px; border-radius: 999px;
+      font-family: var(--body); font-weight: 500; font-size: 13px;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .cta-primary { background: var(--ink); color: var(--warm-white); }
+    .cta-primary:hover { background: var(--rust); }
+    .cta-secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    .cta-secondary:hover { border-color: var(--rust); color: var(--rust); }
+
+    .hero-img { width: 100%; border-radius: 8px; margin: 12px 0 40px; box-shadow: 0 10px 30px rgba(42, 33, 24, 0.08); }
+
+    h2 {
+      font-family: var(--display); font-weight: 600;
+      font-size: 28px; line-height: 1.25; letter-spacing: -0.01em;
+      margin: 48px 0 18px; padding-top: 28px;
+      border-top: 1px solid var(--line); color: var(--ink);
+    }
+    h3 { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.3; margin: 28px 0 10px; color: var(--ink); }
+    p { margin-bottom: 18px; color: var(--ink-light); }
+    p strong, li strong { color: var(--ink); font-weight: 600; }
+    a {
+      color: var(--rust); text-decoration: underline;
+      text-decoration-thickness: 1px; text-underline-offset: 3px;
+      transition: color 0.2s;
+    }
+    a:hover { color: var(--ink); }
+
+    ul, ol { margin: 12px 0 20px 26px; color: var(--ink-light); }
+    li { margin-bottom: 8px; line-height: 1.85; }
+
+    blockquote {
+      border-left: 3px solid var(--rust);
+      padding: 4px 0 4px 18px; margin: 20px 0;
+      color: var(--ink-light); font-style: italic;
+      font-family: var(--display); font-size: 17px;
+    }
+
+    pre { background: #2a2118; color: #f3ede2; padding: 18px 20px; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; margin: 18px 0; }
+    p code, li code { font-family: var(--mono); background: var(--paper); padding: 2px 7px; border-radius: 4px; font-size: 13px; color: var(--ink); }
+
+    .pipeline { background: #2a2118; color: #f3ede2; padding: 22px 24px; border-radius: 8px; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; margin: 24px 0; white-space: pre; overflow-x: auto; }
+
+    figure { margin: 28px 0; }
+    figure img { width: 100%; border-radius: 8px; border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(42, 33, 24, 0.07); }
+    figcaption { font-family: var(--display); font-style: italic; font-size: 14px; color: var(--ink-faint); margin-top: 10px; text-align: center; }
+
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; font-family: var(--body); }
+    table th, table td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--ink-light); }
+    table th { background: var(--paper); font-weight: 600; color: var(--ink); font-size: 13px; letter-spacing: 0.02em; }
+
+    .faq-item { margin-bottom: 28px; }
+    .faq-q { font-family: var(--display); font-weight: 600; font-size: 18px; color: var(--ink); margin-bottom: 10px; line-height: 1.35; }
+    .faq-q::before { content: 'Q. '; color: var(--rust); font-weight: 700; }
+    .faq-a { color: var(--ink-light); font-size: 15.5px; line-height: 1.85; }
+
+    .footer-note { margin-top: 56px; padding-top: 28px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 13px; font-style: italic; }
+
+    .author-card { margin: 48px 0 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 250, 242, 0.7); font-size: 14px; line-height: 1.8; color: var(--ink-light); }
+    .author-card .name { font-weight: 600; color: var(--ink); font-size: 15px; margin-bottom: 8px; }
+    .author-card .bio { margin-bottom: 12px; font-size: 13px; }
+    .author-card .links { font-size: 13px; }
+    .author-card .links a { color: var(--rust); margin-right: 10px; }
+
+    @media (max-width: 640px) {
+      article { padding: 60px 22px 64px; }
+      .pipeline { font-size: 11px; padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="back" href="/">← 返回首页</a>
+  <article>
+    <div class="eyebrow">__SECTION__</div>
+    <h1>__TITLE__</h1>
+    <p class="subtitle">__SUBTITLE__</p>
+    <div class="meta">
+      <span>__DATE_PUBLISHED_HUMAN__</span>
+      <span>·</span>
+      <span>Yao Yuheng</span>
+      __META_TAGS_HTML__
+    </div>
+
+    <p class="lead">__LEAD__</p>
+
+    __CTAS_HTML__
+
+    <img class="hero-img" src="/images/__SLUG__/__HERO_IMG__" alt="__HERO_ALT__" />
+
+    __BODY__
+
+    <h2>常见疑问</h2>
+
+    __FAQ_HTML__
+
+    <div class="author-card">
+      <p class="name">Yao Yuheng / 姚钰珩</p>
+      <p class="bio">NTU Data Science 硕士。专注 AI Agent 系统工程、Eval 驱动开发、LLM 应用。</p>
+      <p class="links">本文首发于 <a href="https://sg.yaoyuheng2001.me/">sg.yaoyuheng2001.me</a>，转载请注明出处。</p>
+      <p class="links">
+        <a href="https://sg.yaoyuheng2001.me/">Blog</a>·
+        <a href="https://github.com/piglet12138">GitHub</a>·
+        <a href="https://juejin.cn/user/3159377279190218/posts">掘金</a>·
+        <a href="https://piglet12138.substack.com/">Substack</a>·
+        <a href="https://sg.yaoyuheng2001.me/rss.xml">RSS</a>
+      </p>
+    </div>
+
+    <div class="footer-note">
+      本文写于 __DATE_PUBLISHED__，更新于 __DATE_MODIFIED__。Hero 插图由 gpt-image-2 生成。
+    </div>
+  </article>
+  <Analytics />
+</body>
+</html>
