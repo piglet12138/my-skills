@@ -177,8 +177,8 @@ mood: warm-engineering     # blog-seo 用来选模板配色变种（如果未来
 
 | 文章 | Mood | Central metaphor | Background |
 |---|---|---|---|
-| [solo-cicd-claude-agent](https://sg.yaoyuheng2001.me/posts/solo-cicd-claude-agent/) | warm-engineering | 木桌 + 飘出的齿轮链 → 夕阳天空 | 暖纸 mood-only |
-| [warp-social-media](https://sg.yaoyuheng2001.me/posts/warp-social-media/) | mystic-dark | 亚空间漂浮的精神实体 + Gellar Field | 阴沉版画质感 |
+| [solo-cicd-claude-agent](https://sg.yaoyuheng2001.me/posts/solo-cicd-claude-agent/) | **tech-drafting** | 等距 blueprint 数据管道示意图 + 比例尺 + 罗盘标记 | 冷调蓝灰网格纸 |
+| [warp-social-media](https://sg.yaoyuheng2001.me/posts/warp-social-media/) | somber-critical | 亚空间漂浮的精神实体 + Gellar Field | 阴沉版画质感 |
 | [tuike](https://sg.yaoyuheng2001.me/posts/tuike/) | literary-personal | 退潮的海岸 + 烛火 | 米白 + sage |
 
 ## 文件

@@ -71,6 +71,10 @@ esac
 
 # Mood-specific style anchors (kept consistent between hero and paper-bg)
 case "$MOOD" in
+  tech-drafting)
+    HERO_STYLE="precise architectural blueprint-style technical illustration, deep slate-blue ink line work on pale cool cream blueprint paper, subtle muted teal and dim sienna accents on connectors, faint scale rulers along left and bottom edges, draftsman compass marks at corners, isometric perspective hint, 1950s engineering schematic / technical drafting manual aesthetic"
+    BG_STYLE="pale cool cream blueprint paper with very faint blue-gray grid pattern (graph paper at low contrast), subtle drafting marks like compass arcs and ruler ticks only at corners and edges, soft paper grain, center area clean for text overlay"
+    ;;
   warm-engineering)
     HERO_STYLE="vintage paper engraving with hand-tinted color, warm cream and rust palette, subtle ink crosshatching, soft paper texture, 19th century technical manual aesthetic"
     BG_STYLE="aged 19th-century engineering blueprint paper, cream and light beige with subtle ink stains, brown fiber flecks, faint sepia drafting compass marks at edges"

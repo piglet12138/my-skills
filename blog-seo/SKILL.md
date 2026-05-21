@@ -93,7 +93,7 @@ done
 |---|---|---|
 | `__SLUG__` | `slug` | URL 路径 |
 | `__TITLE__` | `title` | h1 + JSON-LD headline |
-| `__SUBTITLE__` | `subtitle` (可空) | italic 衬线副标题 |
+| `__SUBTITLE__` | `subtitle` (可空) | 副标题 |
 | `__DESCRIPTION__` | `description` | meta description / og:description |
 | `__DATE_PUBLISHED__` | `date_published` | YYYY-MM-DD |
 | `__DATE_MODIFIED__` | `date_modified` | YYYY-MM-DD |
@@ -110,6 +110,33 @@ done
 | `__FAQ_HTML__` | `faqs[]` 渲染成 `.faq-item` HTML | |
 | `__FAQ_JSONLD__` | `faqs[]` 渲染成 FAQPage JSON-LD | |
 | `__EN_URL__` / `__HREFLANG__` | `en_url` (可空) | 双语 alt link |
+| `__PALETTE_CSS__` | `palette` + `typography` | **manifest 驱动主题：见下** |
+| `__FONTS_URL__` | `fonts_url` | Google Fonts URL |
+
+### 关键：palette + typography 注入 `__PALETTE_CSS__`
+
+manifest 里 `mood` 字段决定调色板和字体。每个 mood 在 [blog-content/references/illustration-prompts.md](../blog-content/references/illustration-prompts.md) 里有 palette + typography + fonts_url 默认值。manifest 可以用 `palette` / `typography` / `fonts_url` 字段**覆盖**默认。
+
+blog-seo 把 manifest 的 palette + typography 渲染成 `:root {}` 块的内容，替换 template 里的 `__PALETTE_CSS__` 占位符：
+
+```css
+__PALETTE_CSS__  becomes:
+
+      --bg: #ece6d8;
+      --paper: #ddd6c5;
+      --ink: #1f2d3d;
+      --ink-light: #4a5a6e;
+      --ink-faint: #8a96a4;
+      --accent: #4a708a;
+      --accent-soft: rgba(74, 112, 138, 0.10);
+      --line: #c8cdd4;
+      --warm-white: #f7f5ee;
+      --display: 'Inter Tight', 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif;
+      --body: 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+```
+
+template 里有 backward-compat 别名（`--cream: var(--bg)`、`--rust: var(--accent)`、`--rust-soft: var(--accent-soft)`），所以历史用 `--cream`/`--rust` 写的 CSS 段都仍然工作。新文章统一用 `--bg`/`--accent`。
 
 ### Step 3 — 生成 JSON-LD（GEO 关键）
 

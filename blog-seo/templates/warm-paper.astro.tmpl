@@ -58,21 +58,17 @@ const faqLd = __FAQ_JSONLD_OBJ__;
   <script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;500;600;700&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="__FONTS_URL__" rel="stylesheet" />
   <style>
+    /* Palette + typography come from manifest.palette + manifest.typography,
+       which blog-seo renders into this :root block per the mood. Defaults
+       are the warm-engineering palette (Cormorant + Noto Serif SC + rust). */
     :root {
-      --cream: #faf6ee;
-      --paper: #f3ede2;
-      --ink: #2a2118;
-      --ink-light: #5c4f42;
-      --ink-faint: #9a8d7f;
-      --rust: #b5543a;
-      --rust-soft: rgba(181, 84, 58, 0.08);
-      --line: #ddd1c1;
-      --warm-white: #fffcf6;
-      --display: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
-      --body: 'Noto Serif SC', 'DM Sans', Georgia, serif;
-      --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+__PALETTE_CSS__
+      /* backward-compat aliases so older blocks using --cream/--rust still work */
+      --cream: var(--bg);
+      --rust: var(--accent);
+      --rust-soft: var(--accent-soft);
     }
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
     html { scroll-behavior: smooth; }

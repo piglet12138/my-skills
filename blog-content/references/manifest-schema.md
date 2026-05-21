@@ -28,10 +28,33 @@ theme: warm-paper             # warm-paper | whitepaper | minimal | custom
 # 注意：theme 决定 Astro 模板结构（typography、layout），但视觉差异化主要靠下面的 hero + paper-bg + mood，
 # 而不是改 theme。多篇 warm-paper 文章看起来不一样，是因为 hero/bg 不同。
 
-# 必填 - 视觉立意 mood（决定 hero + paper-bg 的视觉气质）
-mood: warm-engineering        # warm-engineering | literary-personal | somber-critical | clinical-bright | mystic-dark
+# 必填 - 视觉立意 mood（决定 hero + paper-bg 的视觉气质 + 主题调色板 + 字体）
+mood: tech-drafting           # tech-drafting | warm-engineering | literary-personal | somber-critical | clinical-bright | mystic-dark
 # 详见 blog-content/references/illustration-prompts.md 的 mood 表
 # 同一篇文章的 hero 和 paper-bg 必须用同一个 mood 调用 gen-hero.sh，保证视觉协调
+# blog-seo 用 mood 查找对应的 palette + typography preset（见下面）
+
+# 可选 - 调色板覆盖（不填则用 mood 的默认 palette）
+palette:                      # CSS 变量值；blog-seo 渲染成 :root {} 块
+  bg: '#ece6d8'               # 页面整体背景（被 paper-bg 图盖住，但兜底色）
+  paper: '#ddd6c5'            # 卡片 / 行内 code 背景
+  ink: '#1f2d3d'              # 主文本色
+  ink_light: '#4a5a6e'        # 次级文本
+  ink_faint: '#8a96a4'        # 三级文本（meta, faint）
+  accent: '#4a708a'           # 链接、强调色、tag
+  accent_soft: 'rgba(74, 112, 138, 0.10)'  # tag 背景, .lead 等淡色
+  line: '#c8cdd4'             # 边框、分隔线
+  warm_white: '#f7f5ee'       # 按钮文字、对比白
+
+# 可选 - 字体覆盖（不填则用 mood 默认）
+typography:
+  display: "'Inter Tight', 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif"
+  body: "'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif"
+  mono: "'JetBrains Mono', ui-monospace, Menlo, monospace"
+  # blog-seo 把这三个变量塞进 :root {} 的 --display / --body / --mono
+
+# 可选 - Google Fonts URL（不填则按 typography 字段自动生成）
+fonts_url: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
 
 # 可选 - 双语
 language: zh-CN
