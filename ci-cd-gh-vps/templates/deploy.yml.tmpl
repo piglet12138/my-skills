@@ -1,0 +1,101 @@
+name: Deploy · DO (__SERVICE__)
+
+# main-only: ssh into DO, git pull on __INSTALL_DIR__,
+# reinstall deps if package-lock changed, restart __SERVICE__.
+# .env on the box is preserved (gitignored).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-do
+  cancel-in-progress: false  # never abort a deploy mid-flight
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # needed to delete merged claude/issue-* branches at the end
+    steps:
+      - name: Push to DO and restart service
+        env:
+          SSH_KEY:  ${{ secrets.DO_SSH_KEY }}
+          HOST:     ${{ secrets.DO_HOST }}
+          SSH_USER: ${{ secrets.DO_USER }}
+          SHA:      ${{ github.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              -i ~/.ssh/id_deploy "${SSH_USER}@${HOST}" bash <<EOF
+          set -euo pipefail
+          cd __INSTALL_DIR__
+
+          echo "--- before ---"
+          git log -1 --oneline
+
+          # Stash any in-place dev edits (rare on prod, but safe). Untracked
+          # data files (.env, *.jsonl, bug-images/, ...) are not touched.
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            git stash push -m "auto-stash-\$(date +%s)"
+          fi
+
+          OLD_LOCK_HASH=\$(sha1sum package-lock.json | cut -d' ' -f1)
+          git fetch origin main
+          git reset --hard "$SHA"
+          NEW_LOCK_HASH=\$(sha1sum package-lock.json | cut -d' ' -f1)
+
+          echo "--- after ---"
+          git log -1 --oneline
+
+          if [ "\$OLD_LOCK_HASH" != "\$NEW_LOCK_HASH" ]; then
+            echo "package-lock.json changed; running npm ci --omit=dev"
+            PATH=\$HOME/.nvm/versions/node/v22.22.2/bin:\$PATH npm ci --omit=dev
+          else
+            echo "package-lock.json unchanged; skipping npm ci"
+          fi
+
+          systemctl restart __SERVICE__
+          sleep 2
+          systemctl is-active __SERVICE__
+          EOF
+
+      - name: Smoke check public URL
+        run: |
+          for i in $(seq 1 10); do
+            sleep 1
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://__PUBLIC_HOST__/ || echo "000")
+            [ "$code" = "200" ] && { echo "Public site healthy (HTTP $code)"; exit 0; }
+          done
+          echo "::error::Public site did not return 200 after deploy"
+          exit 1
+
+      - name: Clean up merged claude/issue-* branches
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Any claude/issue-* branch whose tip is reachable from main
+          # (status = identical|behind) is now in prod — safe to delete.
+          # Branches still ahead/diverged from main stay (work in flight).
+          set -eu
+          branches=$(gh api "repos/$REPO/branches" --paginate \
+            --jq '.[] | select(.name | startswith("claude/issue-")) | .name')
+          for b in $branches; do
+            status=$(gh api "repos/$REPO/compare/main...$b" --jq '.status' 2>/dev/null || echo "unknown")
+            case "$status" in
+              identical|behind)
+                echo "Deleting merged: $b"
+                gh api -X DELETE "repos/$REPO/git/refs/heads/$b"
+                ;;
+              *)
+                echo "Keeping (status=$status): $b"
+                ;;
+            esac
+          done

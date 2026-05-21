@@ -1,7 +1,51 @@
 ---
 name: ci-cd-gh-vps
-description: "Set up a GitHub Actions CI/CD pipeline that builds a Node/Bun project, deploys the artifact to a remote VPS via SSH, runs a smoke test as the real end-user, and wires up an `@claude` agent loop for issue-driven iteration. Includes ready-to-paste workflow YAML, a parametrized smoke script, and a bootstrap helper that generates a dedicated SSH keypair + prints the exact GitHub Secrets to add. Use when: bootstrapping a new repo that needs push → build → remote deploy → real-user verification → autonomous bug-fix on `@claude` mention; replicating the pattern used in piglet12138/claw; debugging a stalled smoke job that ends in exactly N seconds (suggests retry budget, not slowness); auditing GH Secret hygiene (trailing newlines, wrong key pasted)."
+description: "Full-automation CI/CD: GitHub Actions + Claude Code Action + local dev-watcher. Reader提 issue 评论 @claude → agent 改代码推 branch → auto-PR 自动开 PR + auto-merge → CI smoke → 合进 dev → 本地 watcher 拉到预览 → 人工 F5 验收 → ff-merge dev→main → deploy.yml 推 prod。包含 4 个工作流模板 + dev-watcher 脚本 + bootstrap 脚本（生成 SSH key + 列出 GH Secrets）。已在 piglet12138/claude-ai-harness 实战验证（一天 14 PR）。Use when: 给单人/小团队项目接通 issue → 自动改 → 自动测 → 自动合 → 一键上线 流水线。"
 ---
+
+## v2（2026-05-22）—— 完整自动化版本
+
+> 这是基于 [piglet12138/claude-ai-harness](https://github.com/piglet12138/claude-ai-harness) 实战迭代出的最新版本。包含 4 个 workflow 文件 + 本地 watcher，实现从 issue 提交到生产部署的全自动化（除人工 F5 验收外）。
+>
+> **完整说明**：[https://sg.yaoyuheng2001.me/posts/solo-cicd-claude-agent/](https://sg.yaoyuheng2001.me/posts/solo-cicd-claude-agent/)
+
+### v2 工作流文件（4 个）
+
+| 模板 | 触发 | 作用 |
+|---|---|---|
+| [templates/claude.yml.tmpl](templates/claude.yml.tmpl) | issue / PR 评论里有 `@claude` | checkout dev 分支，启动 Claude Code Action，agent 改完推 `claude/issue-N` 分支 |
+| [templates/auto-pr.yml.tmpl](templates/auto-pr.yml.tmpl) | push 到 `claude/issue-**` 分支 | 自动 `gh pr create --base dev` + `gh pr merge --auto --merge` |
+| [templates/ci.yml.tmpl](templates/ci.yml.tmpl) | PR 进 main 或 dev | `npm ci` → 语法检查 → 启 server 30s curl `/healthz` |
+| [templates/deploy.yml.tmpl](templates/deploy.yml.tmpl) | push 到 main | SSH VPS → git pull → 必要时 npm ci → systemctl restart → 探公网 → 清理已合 `claude/issue-*` 分支 |
+
+### 本地组件
+
+- [scripts/dev-watcher.sh](scripts/dev-watcher.sh) —— 30 行 bash 循环。每 15s `git fetch origin dev`，发现 dev 前进就 ff-pull。后端文件变了 pkill+重启 node；静态文件变了浏览器 Ctrl+F5 即可。
+
+### v2 用法（4 步）
+
+1. **占位符替换**：在 4 个 `.tmpl` 文件里替换 `__OWNER__` / `__REPO__` / `__VPS_IP__` / `__INSTALL_DIR__` / `__SERVICE__` / `__PUBLIC_HOST__`
+2. **bootstrap SSH key**：`bash scripts/bootstrap.sh --project <slug> --host <vps-ip> --user root` → 在 GH Secrets 里加 `<PROJECT>_HOST` / `<PROJECT>_USER` / `<PROJECT>_SSH_KEY`
+3. **打开 GH Actions PR-create 权限**：
+   ```bash
+   gh api -X PUT repos/$OWNER/$REPO/actions/permissions/workflow \
+     -f default_workflow_permissions=write \
+     -F can_approve_pull_request_reviews=true
+   gh api -X PATCH repos/$OWNER/$REPO -f allow_auto_merge=true -f allow_update_branch=true
+   ```
+4. **本地起 watcher**：`bash scripts/dev-watcher.sh`（建议挂 nohup 后台跑）
+
+### 已知 gotchas（一定要看）
+
+1. **YAML `run: |` 块里嵌多行 bash 字符串**会被 YAML 解析器当块结束符吞掉。用 `body=$(printf 'A %s B %s' "$a" "$b")` 单行 printf。
+2. **GitHub Actions 默认不能创建 PR**，要 PATCH workflow permissions（见上面 step 3）。
+3. **`strict: true` status check + `allow_update_branch: false`** 会让 auto-merge 永远 BLOCKED。必须打开 allow_update_branch。
+4. **CSS 给彩色 emoji 加 `color`** 不生效（emoji 是多色 glyph），UI 改动必须人眼过一遍 —— CI 抓不到这类视觉 bug。
+5. **VPS 上跑过 `nohup node server.mjs &`** 会留下占端口的野生进程，systemd 重启时 EADDRINUSE 静默失败。所有服务统一走 systemd，禁用 nohup。
+
+---
+
+## v1（legacy）—— 简单 CLI artifact deploy
 
 # GH Actions CI/CD with VPS Smoke + @claude Agent
 

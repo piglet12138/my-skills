@@ -1,11 +1,8 @@
 name: Claude Code Agent
 
-# Triggered by @claude mentions in issues/PRs.  The agent reads the
-# referenced context (issue body, PR diff, prior CI logs), edits code,
-# pushes commits to the PR branch, and re-runs the CI smoke workflow.
-#
-# Safety: the agent can write to repo contents and open PRs, but cannot
-# merge — merges remain a human decision.
+# Triggered by @claude mentions in issues/PRs. The agent reads the
+# referenced context, edits code, pushes commits to a branch, and opens
+# a PR. It cannot merge to main (branch protection enforced).
 
 on:
   issue_comment:
@@ -20,29 +17,33 @@ on:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment'              && contains(github.event.comment.body, '@claude'))                                                  ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))                                                 ||
-      (github.event_name == 'pull_request_review'         && contains(github.event.review.body,  '@claude'))                                                 ||
+      (github.event_name == 'issue_comment'              && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review'         && contains(github.event.review.body,  '@claude')) ||
       (github.event_name == 'issues'                      && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents:       write
-      pull-requests:  write
-      issues:         write
-      id-token:       write
-      actions:        read
+      contents:      write
+      pull-requests: write
+      issues:        write
+      id-token:      write
+      actions:       read
 
     steps:
       - uses: actions/checkout@v4
         with:
+          # Agent always works off the integration branch so multiple
+          # in-flight features see each other's state. main is reserved
+          # for prod-promoted code only.
+          ref: dev
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
         with:
-          # Uses Claude Pro/Max subscription quota via OAuth — no API key billing.
-          # Generate via `claude /install-github-app` on local CC, which writes
-          # the CLAUDE_CODE_OAUTH_TOKEN secret to this repo automatically.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Keep tool surface narrow; expand once basic loop works.
-          claude_args: --allowed-tools "Bash,Read,Edit,Glob,Grep,Write"
+          # --append-system-prompt 注入 ack-first 行为：每次触发先在 issue/PR
+          # 下用中文回一条「收到」评论再开始工作；信息不足时追问而不是硬猜。
+          claude_args: >-
+            --allowed-tools "Bash,Read,Edit,Glob,Grep,Write"
+            --append-system-prompt "你在 piglet12138/claude-ai-harness 仓库下作为协作 agent 被 @claude 触发。**第一步**：在触发的 issue/PR 下用中文发一条 ack 评论，格式为「收到 — 正在排查/实现：<issue title>」。**第二步**：阅读 issue title + body + 已有评论理解任务。**信息不足规则**：如果 body 是空的、描述太模糊（例如「X 功能有 bug」却没有复现步骤 / 没有指明页面或组件）、或者无法定位到具体代码位置，**不要硬猜**——在 ack 评论之后再发一条评论列出需要 reporter 补充的具体信息（复现步骤、相关页面 URL、控制台报错截图等），然后退出，等用户补充后会再次触发。**第三步**（仅当信息充分时）：定位 → 修改 → 提交到新分支（**注意：必须基于 dev 分支起，不要基于 main**）→ 推 origin，按 v1 默认行为给出 Create PR 链接（PR 的 base 应该是 **dev** 不是 main），不要自动开 PR。所有面向用户的评论一律用中文。"
