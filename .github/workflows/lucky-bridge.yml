@@ -1,0 +1,412 @@
+name: lucky
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, labeled, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  lucky:
+    if: |
+      (github.event_name == 'issue_comment' && (
+        contains(github.event.comment.body, '@lucky') ||
+        contains(github.event.comment.body, '@luckyapi') ||
+        contains(github.event.comment.body, '/lucky') ||
+        contains(github.event.comment.body, '/fix') ||
+        contains(github.event.comment.body, '/review')
+      )) ||
+      (github.event_name == 'pull_request_review_comment' && (
+        contains(github.event.comment.body, '@lucky') ||
+        contains(github.event.comment.body, '@luckyapi') ||
+        contains(github.event.comment.body, '/lucky') ||
+        contains(github.event.comment.body, '/fix') ||
+        contains(github.event.comment.body, '/review')
+      )) ||
+      (github.event_name == 'pull_request_review' && (
+        contains(github.event.review.body, '@lucky') ||
+        contains(github.event.review.body, '@luckyapi') ||
+        contains(github.event.review.body, '/lucky') ||
+        contains(github.event.review.body, '/review')
+      )) ||
+      (github.event_name == 'issues' && (
+        contains(github.event.issue.body, '@lucky') ||
+        contains(github.event.issue.body, '@luckyapi') ||
+        contains(github.event.issue.title, '@lucky') ||
+        contains(github.event.issue.title, '@luckyapi') ||
+        github.event.label.name == 'lucky-auto'
+      ))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    env:
+      LUCKY_BRIDGE_URL: ${{ secrets.LUCKY_BRIDGE_URL }}
+      LUCKY_BRIDGE_TOKEN: ${{ secrets.LUCKY_BRIDGE_TOKEN }}
+      LUCKY_ALLOWED_USERS: ${{ vars.LUCKY_ALLOWED_USERS }}
+      LUCKY_BASE_BRANCH: ${{ vars.LUCKY_BASE_BRANCH || 'dev' }}
+      LUCKY_HEAD_BRANCH_PREFIX: ${{ vars.LUCKY_HEAD_BRANCH_PREFIX || 'lucky/issue-' }}
+      LUCKY_COMMAND: ${{ github.event.comment.body || github.event.review.body || github.event.issue.body || github.event.pull_request.title }}
+      LUCKY_AGENT_OAUTH_REFRESH_TOKEN: ${{ secrets.LUCKY_AGENT_OAUTH_REFRESH_TOKEN || secrets.THKJ_USER_SMOKE_OAUTH_REFRESH_TOKEN }}
+      LUCKY_AGENT_OAUTH_SCOPES: ${{ secrets.LUCKY_AGENT_OAUTH_SCOPES || secrets.THKJ_USER_SMOKE_OAUTH_SCOPES || 'user:inference user:profile user:sessions:claude_code' }}
+    steps:
+      - name: Check trigger permission
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const payload = context.payload
+            const issue = payload.issue || payload.pull_request
+            const association =
+              payload.comment?.author_association ||
+              payload.review?.author_association ||
+              issue?.author_association ||
+              'NONE'
+            const actor = context.actor
+            const allowedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
+            const labelTrigger =
+              context.eventName === 'issues' &&
+              payload.action === 'labeled' &&
+              payload.label?.name === 'lucky-auto'
+            const allowedUsers = (process.env.LUCKY_ALLOWED_USERS || '')
+              .split(',')
+              .map(user => user.trim())
+              .filter(Boolean)
+
+            if (allowedUsers.length > 0 && !allowedUsers.includes(actor)) {
+              core.setFailed('Actor ' + actor + ' is not in LUCKY_ALLOWED_USERS.')
+              return
+            }
+
+            if (!allowedAssociations.has(association) && !labelTrigger) {
+              core.setFailed(
+                'lucky can only be triggered by repository collaborators, members, owners, or a lucky-auto label event.',
+              )
+              return
+            }
+
+            core.info('lucky trigger approved for ' + actor + ' (' + association + ').')
+
+      - name: Dispatch to lucky
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$LUCKY_BRIDGE_URL" ] || [ -z "$LUCKY_BRIDGE_TOKEN" ]; then
+            echo "::error::Set LUCKY_BRIDGE_URL and LUCKY_BRIDGE_TOKEN repository secrets before using lucky."
+            exit 1
+          fi
+
+          ISSUE_NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
+          COMMENT_URL="${{ github.event.comment.html_url || github.event.review.html_url || github.event.issue.html_url || github.event.pull_request.html_url }}"
+          REPOSITORY="${{ github.repository }}"
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          COMMAND_LOWER="$(printf '%s' "$LUCKY_COMMAND" | tr '[:upper:]' '[:lower:]')"
+          LUCKY_COMMAND_INTENT="general"
+          case "$COMMAND_LOWER" in
+            *"reply "*|*"respond "*)
+              LUCKY_COMMAND_INTENT="reply"
+              PLAN_BODY="- Parse the requested reply text
+          - Record the GitHub session and outbox
+          - Post the reply back to this thread"
+              ;;
+            *"/review"*|*"@lucky review"*|*"@luckyapi review"*)
+              LUCKY_COMMAND_INTENT="review"
+              PLAN_BODY="- Read the pull request context
+          - Review the requested changes
+          - Post findings or a clean result back to this thread"
+              ;;
+            *"/fix"*|*"@lucky fix"*|*"@luckyapi fix"*|*"lucky-auto"*)
+              LUCKY_COMMAND_INTENT="issue_to_pr"
+              PLAN_BODY="- Read the issue or PR context
+          - Branch from $LUCKY_BASE_BRANCH
+          - Run the configured checks
+          - Open a PR back to $LUCKY_BASE_BRANCH or report why human help is needed"
+              ;;
+            *)
+              PLAN_BODY="- Read the issue or PR context
+          - Run the requested lucky task
+          - Post the result or a visible error back to this thread"
+              ;;
+          esac
+
+          gh label create lucky-working --repo "$REPOSITORY" --color F59E0B --description "lucky is working on this issue" || true
+          gh label create lucky-pr-opened --repo "$REPOSITORY" --color 0E8A16 --description "lucky opened a pull request" || true
+          gh label create needs-human --repo "$REPOSITORY" --color B60205 --description "lucky needs human help" || true
+
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --add-label lucky-working || true
+          cat > lucky-working-comment.md <<LUCKY_COMMENT
+          lucky is working on this request.
+
+          Command type: $LUCKY_COMMAND_INTENT
+          Execution: GitHub Actions Runner
+          Run: $RUN_URL
+
+          Plan:
+          $PLAN_BODY
+          LUCKY_COMMENT
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body-file lucky-working-comment.md
+
+          jq -n             --arg repository "$REPOSITORY"             --arg event_name "${{ github.event_name }}"             --arg action "${{ github.event.action }}"             --arg actor "${{ github.actor }}"             --arg issue_number "$ISSUE_NUMBER"             --arg comment_url "$COMMENT_URL"             --arg command "$LUCKY_COMMAND"             --arg command_intent "$LUCKY_COMMAND_INTENT"             --arg base_branch "$LUCKY_BASE_BRANCH"             --arg head_branch_prefix "$LUCKY_HEAD_BRANCH_PREFIX"             --arg execution_location "github_actions_runner"             --arg workflow_run_url "$RUN_URL"             --arg workflow_job "$GITHUB_JOB"             --arg workflow_run_id "$GITHUB_RUN_ID"             --arg workflow_run_attempt "$GITHUB_RUN_ATTEMPT"             --arg runner_name "$RUNNER_NAME"             --arg runner_os "$RUNNER_OS"             --arg plan "$PLAN_BODY"             '{
+              repository: $repository,
+              event_name: $event_name,
+              action: $action,
+              actor: $actor,
+              issue_number: ($issue_number | tonumber),
+              comment_url: $comment_url,
+              command: $command,
+              command_intent: $command_intent,
+              base_branch: $base_branch,
+              head_branch_prefix: $head_branch_prefix,
+              execution_location: $execution_location,
+              workflow_run_url: $workflow_run_url,
+              workflow_job: $workflow_job,
+              workflow_run_id: $workflow_run_id,
+              workflow_run_attempt: $workflow_run_attempt,
+              runner_name: $runner_name,
+              runner_os: $runner_os,
+              plan_steps: ($plan | split("\n") | map(sub("^[- ]+"; "")) | map(select(length > 0))),
+              status_labels: {
+                working: "lucky-working",
+                pr_opened: "lucky-pr-opened",
+                needs_human: "needs-human"
+              }
+            }' > lucky-event.json
+
+          response="$(curl -fsS             -X POST "$LUCKY_BRIDGE_URL/github/events"             -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN"             -H "Content-Type: application/json"             --data @lucky-event.json)"
+          printf '%s' "$response" > lucky-response.json
+
+          pr_url="$(jq -r '.pr_url // .pull_request_url // empty' lucky-response.json 2>/dev/null || true)"
+          session_url="$(jq -r '.session_url // empty' lucky-response.json 2>/dev/null || true)"
+          status_url="$(jq -r '.status_url // .session_url // empty' lucky-response.json 2>/dev/null || true)"
+          session_id="$(jq -r '.session_id // empty' lucky-response.json 2>/dev/null || true)"
+          outbox_count="$(jq -r '(.outbox // []) | length' lucky-response.json 2>/dev/null || echo 0)"
+
+          if [ "$outbox_count" != "0" ]; then
+            jq -c '.outbox[]?' lucky-response.json | while IFS= read -r item; do
+              outbox_id="$(printf '%s' "$item" | jq -r '.id // empty')"
+              outbox_text="$(printf '%s' "$item" | jq -r '.text // .body // empty')"
+              if [ -z "$outbox_text" ]; then
+                continue
+              fi
+              printf '%s\n' "$outbox_text" > lucky-outbox-comment.md
+              posted_url="$(gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body-file lucky-outbox-comment.md 2>/dev/null || true)"
+              if [ -n "$session_id" ] && [ -n "$outbox_id" ]; then
+                jq -n                   --arg delivery_url "$posted_url"                   '{status: "delivered", delivery_url: $delivery_url, github_comment_url: $delivery_url}' > lucky-delivery.json
+                curl -fsS                   -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/outbox/$outbox_id/deliveries"                   -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN"                   -H "Content-Type: application/json"                   --data @lucky-delivery.json >/dev/null || true
+              fi
+            done
+          fi
+
+          if [ -n "$pr_url" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label lucky-working --add-label lucky-pr-opened || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky opened a PR: $pr_url"
+          elif [ -n "$session_url" ] && [ "$outbox_count" != "0" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label lucky-working || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky completed this request. Session status: $status_url"
+          elif { [ "$LUCKY_COMMAND_INTENT" = "general" ] || [ "$LUCKY_COMMAND_INTENT" = "review" ]; } && [ -n "$session_id" ]; then
+            echo "::group::Run lucky agent ($LUCKY_COMMAND_INTENT intent)"
+            set +eo pipefail
+            if [ -z "$LUCKY_AGENT_OAUTH_REFRESH_TOKEN" ]; then
+              echo "::warning::LUCKY_AGENT_OAUTH_REFRESH_TOKEN unset; cannot run agent."
+              gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky received a $LUCKY_COMMAND_INTENT request but has no agent credentials configured. Session: $session_url"
+            else
+              echo "Installing lucky from $LUCKY_BRIDGE_URL/install.sh"
+              curl -fsSL "$LUCKY_BRIDGE_URL/install.sh" | sh >install.log 2>&1
+              echo "install exit=$?"
+              export PATH="$HOME/.local/bin:$PATH"
+              echo "lucky path: $(command -v lucky || echo '(not found)')"
+
+              if command -v lucky >/dev/null 2>&1; then
+                CLAUDE_CODE_OAUTH_REFRESH_TOKEN="$LUCKY_AGENT_OAUTH_REFRESH_TOKEN"                 CLAUDE_CODE_OAUTH_SCOPES="$LUCKY_AGENT_OAUTH_SCOPES"                   timeout 60 lucky auth login >auth.log 2>&1
+                echo "auth login exit=$?"
+                head -c 600 auth.log 2>/dev/null
+                echo
+              fi
+
+              if ! command -v lucky >/dev/null 2>&1; then
+                echo "::error::lucky install failed"
+                tail -c 2000 install.log 2>/dev/null
+                jq -n --arg result "lucky CLI install failed on the GitHub runner. Check workflow logs." --arg status failed                   '{status: $status, error: $result}' > complete.json
+                curl -fsS -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/complete"                   -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN"                   -H "Content-Type: application/json"                   --data @complete.json >/dev/null
+              else
+                ISSUE_BODY_RAW="$(jq -r '.issue.body // .pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null)"
+                USER_ASK_RAW="$(printf '%s' "$LUCKY_COMMAND" | sed -E 's/@?[Ll]ucky([Aa][Pp][Ii])?[[:space:]]*//; s|^/lucky[[:space:]]*||; s|^/review[[:space:]]*||')"
+                USER_ASK="${USER_ASK_RAW:0:1000}"
+
+                if [ "$LUCKY_COMMAND_INTENT" = "review" ]; then
+                  ISSUE_BODY="${ISSUE_BODY_RAW:0:2000}"
+                  PR_DIFF="$(gh pr diff "$ISSUE_NUMBER" --repo "$REPOSITORY" 2>/dev/null)"
+                  PR_DIFF_TRUNC="${PR_DIFF:0:12000}"
+                  if [ -z "$PR_DIFF_TRUNC" ]; then
+                    PR_DIFF_TRUNC="(diff unavailable — issue #$ISSUE_NUMBER may not be a PR)"
+                  fi
+                  printf 'You are reviewing a GitHub pull request as a senior engineer.\n\nUser asked: %s\n\nPR description:\n%s\n\nPR diff (may be truncated):\n\`\`\`diff\n%s\n\`\`\`\n\nReview the diff. Call out bugs, style issues, security concerns, missing tests, or unclear naming. If the diff looks clean, say so plainly with one-line reasoning. Keep response under 400 words in markdown.\n'                     "$USER_ASK" "$ISSUE_BODY" "$PR_DIFF_TRUNC" > prompt.txt
+                  WORKLOAD="github_agent_review"
+                  AGENT_BUDGET="0.50"
+                  AGENT_TIMEOUT="240"
+                else
+                  ISSUE_BODY="${ISSUE_BODY_RAW:0:4000}"
+                  printf 'User on GitHub asked: %s\n\nIssue/PR body:\n%s\n\nRespond concisely (under 300 words). Do NOT modify any files. Output plain markdown.\n'                     "$USER_ASK" "$ISSUE_BODY" > prompt.txt
+                  WORKLOAD="github_agent_general"
+                  AGENT_BUDGET="0.30"
+                  AGENT_TIMEOUT="180"
+                fi
+                echo "prompt bytes: $(wc -c < prompt.txt); workload=$WORKLOAD budget=$AGENT_BUDGET"
+
+                REPLY_FILE="$(mktemp)"
+                CLAUDE_CODE_OAUTH_REFRESH_TOKEN="$LUCKY_AGENT_OAUTH_REFRESH_TOKEN"                   timeout "$AGENT_TIMEOUT" lucky --print                     --tools ""                     --max-turns 3                     --max-budget-usd "$AGENT_BUDGET"                     --workload "$WORKLOAD"                     --dangerously-skip-permissions                     "$(cat prompt.txt)" >"$REPLY_FILE" 2>&1
+                RC=$?
+                echo "lucky exit=$RC; reply bytes: $(wc -c < "$REPLY_FILE" 2>/dev/null || echo 0)"
+                echo "--- lucky output (first 1500 chars) ---"
+                head -c 1500 "$REPLY_FILE" 2>/dev/null
+                echo
+                echo "--- end lucky output ---"
+                if [ "$RC" = "0" ]; then
+                  STATUS=completed
+                  RESULT="$(cat "$REPLY_FILE")"
+                else
+                  STATUS=failed
+                  TAIL_OUT="$(tail -c 2000 "$REPLY_FILE" 2>/dev/null)"
+                  RESULT="$(printf 'lucky %s agent run failed (exit %s). Last output:\n\n\`\`\`\n%s\n\`\`\`\n' "$LUCKY_COMMAND_INTENT" "$RC" "$TAIL_OUT")"
+                fi
+                jq -n --arg status "$STATUS" --arg result "$RESULT"                   '{status: $status, result: $result}' > complete.json
+                curl -fsS -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/complete"                   -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN"                   -H "Content-Type: application/json"                   --data @complete.json >/dev/null
+                printf '%s\n' "$RESULT" > agent-reply.md
+                gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body-file agent-reply.md || true
+                gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label lucky-working || true
+              fi
+            fi
+            set -eo pipefail
+            echo "::endgroup::"
+          elif [ "$LUCKY_COMMAND_INTENT" = "issue_to_pr" ] && [ -n "$session_id" ]; then
+            echo "::group::Run lucky agent (issue_to_pr intent)"
+            set +eo pipefail
+            if [ -z "$LUCKY_AGENT_OAUTH_REFRESH_TOKEN" ]; then
+              echo "::warning::LUCKY_AGENT_OAUTH_REFRESH_TOKEN unset; cannot run agent."
+              gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky received an issue_to_pr request but has no agent credentials configured. Session: $session_url"
+            else
+              echo "Installing lucky from $LUCKY_BRIDGE_URL/install.sh"
+              curl -fsSL "$LUCKY_BRIDGE_URL/install.sh" | sh >install.log 2>&1
+              echo "install exit=$?"
+              export PATH="$HOME/.local/bin:$PATH"
+              echo "lucky path: $(command -v lucky || echo '(not found)')"
+              if command -v lucky >/dev/null 2>&1; then
+                CLAUDE_CODE_OAUTH_REFRESH_TOKEN="$LUCKY_AGENT_OAUTH_REFRESH_TOKEN"                 CLAUDE_CODE_OAUTH_SCOPES="$LUCKY_AGENT_OAUTH_SCOPES"                   timeout 60 lucky auth login >auth.log 2>&1
+                echo "auth login exit=$?"
+                head -c 600 auth.log 2>/dev/null
+                echo
+              fi
+              if ! command -v lucky >/dev/null 2>&1; then
+                echo "::error::lucky install failed"
+                tail -c 2000 install.log 2>/dev/null
+                jq -n --arg result "lucky CLI install failed on the GitHub runner. Check workflow logs." --arg status failed                   '{status: $status, error: $result}' > complete.json
+                curl -fsS -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/complete"                   -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN"                   -H "Content-Type: application/json"                   --data @complete.json >/dev/null
+              else
+                WORK_DIR="$(mktemp -d)"
+                cd "$WORK_DIR"
+                # Clone the base branch directly so create-new-branch from HEAD works without separate fetch.
+                if ! git clone --depth 50 --branch "$LUCKY_BASE_BRANCH" "https://x-access-token:$GH_TOKEN@github.com/$REPOSITORY.git" repo >clone.log 2>&1; then
+                  echo "::error::git clone failed"
+                  tail -c 2000 clone.log
+                  jq -n --arg result "lucky issue_to_pr agent could not clone the repo on the runner. Check workflow logs." --arg status failed                     '{status: $status, error: $result}' > complete.json
+                  curl -fsS -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/complete"                     -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN" -H "Content-Type: application/json"                     --data @complete.json >/dev/null
+                else
+                  cd repo
+                  git config user.email "lucky-agent@noreply.local"
+                  git config user.name "lucky agent"
+                  BRANCH="${LUCKY_HEAD_BRANCH_PREFIX}${ISSUE_NUMBER}-$(date +%s)"
+                  if ! git checkout -b "$BRANCH" >checkout.log 2>&1; then
+                    echo "::error::could not create working branch $BRANCH"
+                    cat checkout.log
+                    git status
+                  fi
+                  echo "working branch: $(git branch --show-current)"
+
+                  ISSUE_TITLE="$(jq -r '.issue.title // .pull_request.title // ""' "$GITHUB_EVENT_PATH" 2>/dev/null)"
+                  ISSUE_TITLE_TRUNC="${ISSUE_TITLE:0:200}"
+                  ISSUE_BODY_RAW="$(jq -r '.issue.body // .pull_request.body // ""' "$GITHUB_EVENT_PATH" 2>/dev/null)"
+                  ISSUE_BODY="${ISSUE_BODY_RAW:0:4000}"
+                  USER_ASK_RAW="$(printf '%s' "$LUCKY_COMMAND" | sed -E 's/@?[Ll]ucky([Aa][Pp][Ii])?[[:space:]]*//; s|^/lucky[[:space:]]*||; s|^/fix[[:space:]]*||')"
+                  USER_ASK="${USER_ASK_RAW:0:1000}"
+                  printf 'You are working on issue #%s in the %s repository.\n\nIssue title: %s\n\nIssue body:\n%s\n\nUser asked: %s\n\nMake a focused, minimal code change to address the issue. Use Read/Grep/Glob to explore first. Use Edit or Write to modify files. Stay scoped — do not refactor unrelated code. Do NOT modify files under .github/ or src/constants/github-app.ts (that is the workflow calling you). After your changes, summarize what you did in 3-5 bullets.\n'                     "$ISSUE_NUMBER" "$REPOSITORY" "$ISSUE_TITLE_TRUNC" "$ISSUE_BODY" "$USER_ASK" > /tmp/lucky-prompt.txt
+                  echo "prompt bytes: $(wc -c < /tmp/lucky-prompt.txt)"
+
+                  REPLY_FILE="$(mktemp)"
+                  CLAUDE_CODE_OAUTH_REFRESH_TOKEN="$LUCKY_AGENT_OAUTH_REFRESH_TOKEN"                     timeout 600 lucky --print                       --tools "Read,Edit,Write,Glob,Grep,Bash"                       --disallowed-tools "Edit(.github/**)" "Write(.github/**)" "Edit(src/constants/github-app.ts)" "Write(src/constants/github-app.ts)"                       --max-turns 15                       --max-budget-usd 2.00                       --workload "github_agent_issue_to_pr"                       --dangerously-skip-permissions                       "$(cat /tmp/lucky-prompt.txt)" >"$REPLY_FILE" 2>&1
+                  RC=$?
+                  echo "lucky exit=$RC; reply bytes: $(wc -c < "$REPLY_FILE" 2>/dev/null || echo 0)"
+                  echo "--- lucky output (last 2000 chars) ---"
+                  tail -c 2000 "$REPLY_FILE" 2>/dev/null
+                  echo
+                  echo "--- end lucky output ---"
+
+                  WORKING_DIRTY="$(git status --porcelain | wc -l | tr -d ' ')"
+                  COMMITS_AHEAD="$(git rev-list --count "origin/$LUCKY_BASE_BRANCH..HEAD" 2>/dev/null || echo 0)"
+                  DIFF_STAT="$(git diff "origin/$LUCKY_BASE_BRANCH"..HEAD --stat 2>/dev/null | tail -20)"
+                  if [ -z "$DIFF_STAT" ]; then
+                    DIFF_STAT="$(git diff HEAD --stat 2>/dev/null | tail -20)"
+                  fi
+                  echo "working dirty: $WORKING_DIRTY; commits ahead: $COMMITS_AHEAD"
+                  echo "--- diff stat ---"
+                  echo "$DIFF_STAT"
+
+                  PR_URL=""
+                  if [ "$RC" != "0" ]; then
+                    STATUS=failed
+                    AGENT_OUT="$(tail -c 3000 "$REPLY_FILE" 2>/dev/null)"
+                    RESULT="$(printf 'lucky issue_to_pr agent failed (exit %s, %s commits ahead, %s files dirty).\n\n## Agent output tail\n\`\`\`\n%s\n\`\`\`\n' "$RC" "$COMMITS_AHEAD" "$WORKING_DIRTY" "$AGENT_OUT")"
+                  elif [ "$WORKING_DIRTY" = "0" ] && [ "$COMMITS_AHEAD" = "0" ]; then
+                    STATUS=failed
+                    AGENT_OUT="$(tail -c 3000 "$REPLY_FILE" 2>/dev/null)"
+                    RESULT="$(printf 'lucky issue_to_pr agent ran successfully but produced no file changes. This usually means the agent decided no code change was needed.\n\n## Agent output tail\n\`\`\`\n%s\n\`\`\`\n' "$AGENT_OUT")"
+                  else
+                    if [ "$WORKING_DIRTY" != "0" ]; then
+                      git add -A
+                      git commit -m "$(printf 'lucky: address issue #%s\n\n%s' "$ISSUE_NUMBER" "$USER_ASK")" >commit.log 2>&1
+                    fi
+                    if git push -u origin "$BRANCH" >push.log 2>&1; then
+                      AGENT_SUMMARY="$(tail -c 3000 "$REPLY_FILE" 2>/dev/null)"
+                      PR_BODY_FILE="$(mktemp)"
+                      printf 'Created by @lucky agent in response to: "%s"\n\nCloses #%s\n\n## Diff stat\n\`\`\`\n%s\n\`\`\`\n\n## Agent summary (tail of run output)\n\`\`\`\n%s\n\`\`\`\n'                         "$USER_ASK" "$ISSUE_NUMBER" "$DIFF_STAT" "$AGENT_SUMMARY" > "$PR_BODY_FILE"
+                      PR_URL="$(gh pr create --repo "$REPOSITORY" --base "$LUCKY_BASE_BRANCH" --head "$BRANCH"                         --title "lucky: address issue #$ISSUE_NUMBER" --body-file "$PR_BODY_FILE" 2>pr-create.log)"
+                      if [ -n "$PR_URL" ]; then
+                        STATUS=completed
+                        RESULT="$(printf 'lucky opened PR: %s\n\n## Diff stat\n\`\`\`\n%s\n\`\`\`\n' "$PR_URL" "$DIFF_STAT")"
+                      else
+                        STATUS=failed
+                        RESULT="$(printf 'lucky modified files and pushed branch %s but failed to open PR.\n\n## Diff stat\n\`\`\`\n%s\n\`\`\`\n\n## gh pr create log\n\`\`\`\n%s\n\`\`\`\n' "$BRANCH" "$DIFF_STAT" "$(tail -c 1000 pr-create.log)")"
+                      fi
+                    else
+                      STATUS=failed
+                      RESULT="$(printf 'lucky modified files but failed to push branch %s.\n\n## Push log\n\`\`\`\n%s\n\`\`\`\n' "$BRANCH" "$(tail -c 1500 push.log)")"
+                    fi
+                  fi
+
+                  jq -n --arg status "$STATUS" --arg result "$RESULT" --arg pr_url "$PR_URL"                     '{status: $status, result: $result} + (if $pr_url == "" then {} else {pr_url: $pr_url} end)' > complete.json
+                  curl -fsS -X POST "$LUCKY_BRIDGE_URL/github/sessions/$session_id/complete"                     -H "Authorization: Bearer $LUCKY_BRIDGE_TOKEN" -H "Content-Type: application/json"                     --data @complete.json >/dev/null
+
+                  cd "$GITHUB_WORKSPACE" 2>/dev/null || cd /
+                  printf '%s\n' "$RESULT" > /tmp/agent-reply.md
+                  gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body-file /tmp/agent-reply.md || true
+                  if [ -n "$PR_URL" ]; then
+                    gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label lucky-working --add-label lucky-pr-opened || true
+                  else
+                    gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label lucky-working || true
+                  fi
+                fi
+              fi
+            fi
+            set -eo pipefail
+            echo "::endgroup::"
+          elif [ -n "$session_url" ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky accepted the request and started a [GitHub Actions runner session]($session_url). lucky will post the final result or a visible error back to this thread."
+          else
+            gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "lucky accepted the request. Watch this issue for status updates."
+          fi
