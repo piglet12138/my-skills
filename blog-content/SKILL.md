@@ -53,15 +53,43 @@ triggers:
 
 #### 2.1 Mood 判断
 
-根据内容选 mood（参考 [references/illustration-prompts.md](references/illustration-prompts.md) 的 mood 表）：
+> ⚠️ **历史 bug 警示**：早期 agent 默认选 `warm-engineering`,导致 SaaS 产品发布、数据对比类文章 hero 全部跟 tuike(literary-personal)视觉撞车 —— 因为这两个 mood 都用 cream/sepia 暖纸调,gpt-image-2 出图风格几乎不可区分。**所以 mood 必须严格匹配文章主类型,不能用默认值或"差不多就行"**。
 
-| Mood | 适合内容 | 色调倾向 | 笔触 |
-|---|---|---|---|
-| **warm-engineering** | 技术博客，自动化、工具搭建 | cream + rust + 暗木色 | vintage engraving 工程图 |
-| **literary-personal** | 散文、个人随笔、自传 | 米白 + sage + 灰玫 | 水彩 + 铅笔 |
-| **somber-critical** | 媒介批评、思辨长文、哲学 | 灰白 + 深红 + 黑 | 老解剖图 / 炼金术插画 |
-| **clinical-bright** | 数据报告、白皮书 | 白底 + 蓝 + 橙 | 现代信息图 |
-| **mystic-dark** | 神秘 / 黑色幽默 / 玄学 | 墨黑 + 金 + 暗紫 | 木版印刷 + 错版叠印 |
+**Step 1 — 用决策树定位 mood（按顺序判断,匹配第一项就停）：**
+
+| 这篇文章核心是…… | 选 mood | 关键词 |
+|---|---|---|
+| 现代 SaaS 产品发布 / 数据报告 / 对比分析 / 价格表 / API 文档 | **`clinical-bright`** | 白底,蓝 + 橙,IBM Plex,Tufte 信息图 |
+| 工程实践 / DevOps / 工具搭建 / 系统架构 | **`tech-drafting`** | 冷调蓝灰,blueprint,等距示意图 |
+| 散文 / 个人随笔 / 心情记录 / 自传 | **`literary-personal`** | 米白 + sage + 灰玫,水彩 + 铅笔 |
+| 媒介批评 / 思辨长文 / 哲学 / 文化评论 | **`somber-critical`** | 灰白 + 深红,老解剖图 |
+| 神秘学 / 黑色幽默 / 玄学 / Tarot | **`mystic-dark`** | 墨黑 + 金,木版印刷 |
+| **怀旧** 工艺 / 手工 / 老物件 / 旧时代叙事 | **`warm-engineering`** | cream + rust,vintage engraving |
+
+**Step 2 — 反向验证(防止误选)：**
+
+| 文章关键词 | ❌ 不要选 | ✅ 应该选 |
+|---|---|---|
+| "SaaS / OSS launch / 发布 / pricing / dashboard" | warm-engineering, literary-personal | **clinical-bright** |
+| "CI/CD / pipeline / agent / workflow / DevOps" | warm-engineering, clinical-bright | **tech-drafting** |
+| "GEO/AEO / monitoring / 平台 / 数据分析" | warm-engineering(撞 tuike) | **clinical-bright** |
+| "对比 / vs / 价格表 / feature matrix" | 任何暖色调 mood | **clinical-bright** |
+| 怀念 / 时间过去了 / 个人成长 | clinical-bright, tech-drafting | **literary-personal** |
+| 老技术 / 复古工坊 / 物件考据 | clinical-bright | **warm-engineering** |
+
+**`warm-engineering` 的真实适用域很窄**:专门给"工艺类怀旧"内容 —— 比如手工木作 / 老相机修复 / 19 世纪工程史这种主题。**现代 SaaS / 数据 / 监测 / DevOps 一律不要选**,会跟 tuike 撞视觉。
+
+**Step 3 — agent 自检:**
+
+在调 `gen-hero.sh` **前**,写出来:
+
+```
+本文核心类型 = <一句话描述>
+匹配的 mood = <选择>
+理由 = <为什么不是其他 mood>
+```
+
+把这三行给用户确认后再生成。**不要静默生成。**
 
 #### 2.2 Central metaphor
 
@@ -177,9 +205,12 @@ mood: warm-engineering     # blog-seo 用来选模板配色变种（如果未来
 
 | 文章 | Mood | Central metaphor | Background |
 |---|---|---|---|
+| [open-source-citescope](https://sg.yaoyuheng2001.me/posts/open-source-citescope/) | **clinical-bright** | Tufte 棱镜分光 + 6 道彩色光带 + 横轴源域名点 | 近白色 + 极淡冷灰网格 + 角落橙 ticks |
 | [solo-cicd-claude-agent](https://sg.yaoyuheng2001.me/posts/solo-cicd-claude-agent/) | **tech-drafting** | 等距 blueprint 数据管道示意图 + 比例尺 + 罗盘标记 | 冷调蓝灰网格纸 |
 | [warp-social-media](https://sg.yaoyuheng2001.me/posts/warp-social-media/) | somber-critical | 亚空间漂浮的精神实体 + Gellar Field | 阴沉版画质感 |
 | [tuike](https://sg.yaoyuheng2001.me/posts/tuike/) | literary-personal | 退潮的海岸 + 烛火 | 米白 + sage |
+
+⚠️ **反例**: 早期 open-source-citescope 第一版用了 `warm-engineering` mood,生成出的 hero 是黄铜光学测绘仪 + 老地图 + 沉色调,跟 tuike 一眼看不出区别。原因是 warm-engineering 默认词典里的 cream/sepia/parchment 跟 literary-personal 高度重叠。**修复**:重生成时切到 `clinical-bright`,palette 也从 warm 切到 white + 蓝 + 橙,视觉问题立刻消失。这是为什么 2.1 节加了决策树 + agent 自检 + 脚本去掉默认值。
 
 ## 文件
 

@@ -15,8 +15,14 @@
 #
 # Args:
 #   --kind        hero | paper-bg (default: hero)
-#   --mood        warm-engineering | literary-personal | somber-critical |
-#                 clinical-bright | mystic-dark  (default: warm-engineering)
+#   --mood        REQUIRED. One of:
+#                   clinical-bright    现代 SaaS / 数据 / 产品发布
+#                   tech-drafting      工程实践 / DevOps / 系统架构
+#                   literary-personal  散文 / 个人随笔
+#                   somber-critical    媒介批评 / 思辨长文
+#                   warm-engineering   ⚠️ 窄域: 怀旧工艺 (现代 SaaS 不要选, 撞 tuike)
+#                   mystic-dark        神秘 / 黑色幽默
+#                 (no default — must be explicit to avoid sepia/tuike-vibe bug)
 #   --concept     central metaphor for hero, or background concept for paper-bg.
 #                 Required for hero. For paper-bg, can be empty (mood drives it).
 #
@@ -32,7 +38,7 @@ set -eu
 
 SLUG=""
 KIND="hero"
-MOOD="warm-engineering"
+MOOD=""           # was: "warm-engineering" — removed default to force explicit choice (prevents sepia/tuike-vibe bug)
 CONCEPT=""
 SIZE=""
 LUCKYAPI_KEY="${LUCKYAPI_KEY:-sk-jrheAkxb0gNVW7nzCfJbyw28eGepS78qP9HubCgSkc6SyxtS}"
@@ -57,6 +63,35 @@ if [ -z "$SLUG" ]; then
   echo "usage: $0 --slug <SLUG> --kind <hero|paper-bg> --mood <MOOD> --concept '...'" >&2
   exit 2
 fi
+if [ -z "$MOOD" ]; then
+  cat <<'EOF' >&2
+ERROR: --mood is required (no default, see SKILL.md 2.1 decision tree).
+
+Valid moods:
+  clinical-bright    现代 SaaS / 数据报告 / 对比 / 产品发布
+  tech-drafting      工程实践 / DevOps / 工具搭建 / 系统架构
+  literary-personal  散文 / 个人随笔
+  somber-critical    媒介批评 / 思辨长文
+  warm-engineering   ⚠️ 窄域: 怀旧工艺 / 老技术叙事 (现代 SaaS 不要选 — 撞 tuike 视觉)
+  mystic-dark        神秘 / 黑色幽默
+
+Before calling this script, write:
+  本文核心类型 = <一句话>
+  匹配的 mood = <选择>
+  理由 = <为什么不是其他>
+…and confirm with the user.
+EOF
+  exit 2
+fi
+
+# Validate mood is one of the known set
+case "$MOOD" in
+  clinical-bright|tech-drafting|literary-personal|somber-critical|warm-engineering|mystic-dark) ;;
+  *)
+    echo "ERROR: --mood '$MOOD' is not a recognized mood. See SKILL.md 2.1." >&2
+    exit 2 ;;
+esac
+
 if [ "$KIND" = "hero" ] && [ -z "$CONCEPT" ]; then
   echo "hero requires --concept (the central metaphor, e.g. 'a wooden desk by a window at sunset...')" >&2
   exit 2

@@ -6,14 +6,16 @@
 
 读完素材 + 截图后，用这个表给文章定 mood，后续 hero 和 paper-bg 都按这个 mood 走。**Mood 同时决定调色板 + 字体 + 视觉风格**，blog-seo 会根据 mood 把对应的 palette / typography 注入到 Astro 模板的 `:root {}` 块。
 
-| Mood | 适合内容 | 色调倾向 | 字体 | 视觉风格 | 参考 |
-|---|---|---|---|---|---|
-| `tech-drafting` | **技术博客 / 工程实践 / 工具搭建** | 冷调蓝灰 + 深 slate + blueprint 蓝 accent | Inter Tight / Inter / JetBrains Mono | blueprint engineering 示意图 + 比例尺 + 罗盘标记 | solo-cicd-claude-agent (v2) |
-| `warm-engineering` | 工艺类技术博客（偏怀旧）| cream + rust + 暗木色 | Cormorant Garamond + Noto Serif SC | vintage engraving 工坊场景 | (历史版本) |
-| `literary-personal` | 散文、个人随笔、自传 | 米白 + sage + 灰玫 | Cormorant Garamond + Noto Serif SC | 水彩 + 铅笔 | tuike |
-| `somber-critical` | 媒介批评、思辨长文、哲学 | 灰白 + 深红 + 黑 | Cormorant Garamond + Noto Serif SC | 老解剖图 / 炼金术插画 | warp-social-media |
-| `clinical-bright` | 数据报告、白皮书 | 白底 + 蓝 + 橙 | IBM Plex Sans | 现代信息图 | focus-whitepaper |
-| `mystic-dark` | 神秘 / 黑色幽默 / 玄学 | 墨黑 + 金 + 暗紫 | Cormorant Garamond + Noto Serif SC | 木版印刷 + 错版叠印 | （未尝试） |
+> ⚠️ **关键警示** — 2026-05 之前的一个已知 bug:agent 把 `warm-engineering` 当成"技术类默认",导致 SaaS 产品发布 / 数据报告类文章 hero 视觉跟 tuike(literary-personal)撞车 —— 两个 mood 都是 cream/sepia 暖纸,gpt-image-2 出图几乎不可区分。**warm-engineering 的适用域很窄,只给"怀旧工艺类"内容用**。SaaS / 数据 / DevOps / 现代产品发布 一律走 `clinical-bright` 或 `tech-drafting`。
+
+| Mood | 适合内容 | ❌ 不适合（常见误用） | 色调倾向 | 字体 | 视觉风格 | 参考 |
+|---|---|---|---|---|---|---|
+| `clinical-bright` | **现代 SaaS / 数据报告 / 对比分析 / API 文档 / 产品发布** | (没有) | 白底 + 蓝 + 橙 | IBM Plex Sans | 现代 Tufte 信息图 | focus-whitepaper, open-source-citescope |
+| `tech-drafting` | **工程实践 / DevOps / 工具搭建 / 系统架构** | 现代 SaaS 产品发布(用 clinical-bright) | 冷调蓝灰 + blueprint 蓝 | Inter Tight / Inter / JetBrains Mono | blueprint engineering 示意图 + 比例尺 + 罗盘 | solo-cicd-claude-agent (v2) |
+| `literary-personal` | 散文、个人随笔、自传 | 任何技术类(撞 warm-engineering) | 米白 + sage + 灰玫 | Cormorant Garamond + Noto Serif SC | 水彩 + 铅笔 | tuike |
+| `somber-critical` | 媒介批评、思辨长文、哲学 | 产品发布(过于沉重) | 灰白 + 深红 + 黑 | Cormorant Garamond + Noto Serif SC | 老解剖图 / 炼金术插画 | warp-social-media |
+| `warm-engineering` | **窄域：怀旧工艺 / 手工木作 / 老技术考据 / 19 世纪工程史叙事** | **现代技术博客、SaaS 发布、数据报告(用 clinical-bright / tech-drafting!)** | cream + rust + 暗木色 | Cormorant Garamond + Noto Serif SC | vintage engraving 工坊场景 | (无活跃文章用此) |
+| `mystic-dark` | 神秘 / 黑色幽默 / 玄学 / Tarot | 任何产品/技术内容 | 墨黑 + 金 + 暗紫 | Cormorant Garamond + Noto Serif SC | 木版印刷 + 错版叠印 | （未尝试） |
 
 ## Mood → palette + typography 默认值（blog-seo 用）
 
